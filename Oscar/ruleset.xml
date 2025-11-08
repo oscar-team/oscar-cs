@@ -4,6 +4,7 @@
 
     <rule ref="PSR12">
         <exclude name="Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore"/>
+        <exclude name="Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine"/>
     </rule>
 
     <config name="tab_width" value="4"/>
