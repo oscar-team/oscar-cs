@@ -1,5 +1,5 @@
 {
-    "name": "oscar/coding-standard",
+    "name": "oscar-team/per-coding-standard",
     "description": "Oscar coding standard built on PER Coding Style 3.0.",
     "type": "phpcodesniffer-standard",
     "require-dev": {
