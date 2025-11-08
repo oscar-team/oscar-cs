@@ -3,7 +3,9 @@
 namespace App;
 
 use Vendor\Package\{ClassA, ClassB};
+
 use function Vendor\Package\{functionA};
+
 use const Vendor\Package\{CONSTANT_A};
 
 #[\Attribute]
