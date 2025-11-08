@@ -2,7 +2,9 @@
 <ruleset name="Oscar">
     <description>Coding standard for the Oscar technical team aligned with PER Coding Style 3.0.</description>
 
-    <rule ref="PSR12"/>
+    <rule ref="PSR12">
+        <exclude name="Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore"/>
+    </rule>
 
     <config name="tab_width" value="4"/>
 
