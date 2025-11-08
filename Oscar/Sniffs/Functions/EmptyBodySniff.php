@@ -67,6 +67,7 @@ final class EmptyBodySniff implements Sniff
                 $opener,
                 'BracesNotInline'
             );
+            return;
         }
 
         $beforeOpenerPtr = $opener - 1;
