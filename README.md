@@ -34,6 +34,10 @@ All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR
 
 Use `phpcs -i` to confirm that `Oscar` appears in the installed standards list.
 
+## Testing
+- Install dependencies with `composer install`.
+- Run the automated fixtures with `./tests/run-phpcs.sh`.
+
 ## Development Notes
 - Baseline PSR-12 is referenced, with `Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore` excluded to avoid conflicts with inline empty bodies.
 - Sniffs live under `Oscar/Sniffs`.

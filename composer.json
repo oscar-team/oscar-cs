@@ -1,0 +1,8 @@
+{
+    "name": "oscar/coding-standard",
+    "description": "Oscar coding standard built on PER Coding Style 3.0.",
+    "type": "phpcodesniffer-standard",
+    "require-dev": {
+        "squizlabs/php_codesniffer": "^3.10"
+    }
+}
