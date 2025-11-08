@@ -37,6 +37,30 @@ class CompliantExample
         ];
     }
 
+    public function arrayMergeExample(): array
+    {
+        return array_merge([], [
+            'invoiceId' => 'invoice_id',
+            'creditNoteId' => '$invoiceId',
+            'isCreditNote' => true,
+            'documentCreatedAt' => 'now()',
+            'departmentModel' => '$booking->department',
+            'payLaterFee' => '$invoice->getPayLaterFee()',
+        ]);
+    }
+
+    public function multiLineFunctionCall(): void
+    {
+        logTo([
+            'level' => 'error',
+            'message' => "CreateBookingCreditNoteAction failed: {$th->getMessage()}",
+            'exception' => $th,
+            'data' => [
+                'booking' => $booking->id,
+            ],
+        ], 'booking-documents');
+    }
+
     public function matchExample(string $value): string
     {
         return match ($value) {

@@ -238,6 +238,12 @@ final class TrailingCommaSniff implements Sniff
             return;
         }
 
+        // For argument lists, check if arguments themselves are on separate lines.
+        // If all arguments start on the same line, don't require a trailing comma.
+        if ($context === 'ArgumentList' && !$this->areArgumentsOnSeparateLines($phpcsFile, $openPtr, $closePtr)) {
+            return;
+        }
+
         $lastContent = $this->findLastMeaningful($phpcsFile, $openPtr, $closePtr);
         if ($lastContent === null) {
             return;
@@ -293,6 +299,81 @@ final class TrailingCommaSniff implements Sniff
         }
 
         return $last;
+    }
+
+    /**
+     * Check if arguments in an argument list are on separate lines.
+     *
+     * Returns true if at least two arguments start on different lines.
+     * Returns false if all arguments start on the same line (even if one argument is multi-line).
+     *
+     * Exception: If the first argument starts on the same line as the opening parenthesis,
+     * we don't require a trailing comma even if subsequent arguments are on different lines,
+     * because they may have been pushed down by a multi-line first argument.
+     */
+    private function areArgumentsOnSeparateLines(File $phpcsFile, int $openPtr, int $closePtr): bool
+    {
+        $tokens = $phpcsFile->getTokens();
+
+        // Find the first argument's starting line
+        $firstArgStart = $phpcsFile->findNext(self::getSkippableTokens(), $openPtr + 1, $closePtr, true);
+        if ($firstArgStart === false) {
+            // No arguments
+            return false;
+        }
+
+        $firstArgLine = $tokens[$firstArgStart]['line'];
+        $openLine = $tokens[$openPtr]['line'];
+
+        // If the first argument starts on the same line as the opening parenthesis,
+        // don't require a trailing comma. This handles cases like:
+        // - array_merge([], [...]) - both args start on same line
+        // - logTo([...], 'arg') - first arg is multi-line, second is pushed down
+        if ($firstArgLine === $openLine) {
+            return false;
+        }
+
+        // First argument starts on a different line than the opening parenthesis.
+        // Check if subsequent arguments are also on different lines.
+        $ptr = $openPtr + 1;
+        $depth = 0;
+
+        while ($ptr < $closePtr) {
+            $code = $tokens[$ptr]['code'];
+
+            // Track nesting depth to ignore commas inside nested structures
+            if ($code === T_OPEN_PARENTHESIS || $code === T_OPEN_SHORT_ARRAY) {
+                $depth++;
+            } elseif ($code === T_CLOSE_PARENTHESIS || $code === T_CLOSE_SHORT_ARRAY) {
+                $depth--;
+            } elseif ($code === T_ARRAY && isset($tokens[$ptr]['parenthesis_opener'])) {
+                // Skip past array() structure
+                $depth++;
+                $ptr = $tokens[$tokens[$ptr]['parenthesis_opener']]['parenthesis_closer'];
+                $depth--;
+                $ptr++;
+                continue;
+            }
+
+            // If we find a comma at the top level, it separates arguments
+            if ($code === T_COMMA && $depth === 0) {
+                // Find the start of the next argument (after the comma)
+                $nextArgStart = $phpcsFile->findNext(self::getSkippableTokens(), $ptr + 1, $closePtr, true);
+                if ($nextArgStart !== false) {
+                    $nextArgLine = $tokens[$nextArgStart]['line'];
+                    // If the next argument starts on a different line than the first argument,
+                    // then arguments are intentionally on separate lines
+                    if ($nextArgLine !== $firstArgLine) {
+                        return true;
+                    }
+                }
+            }
+
+            $ptr++;
+        }
+
+        // All arguments start on the same line
+        return false;
     }
 
     /**
