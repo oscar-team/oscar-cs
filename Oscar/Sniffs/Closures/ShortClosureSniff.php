@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace OscarStandard\Sniffs\Closures;
+namespace Oscar\Sniffs\Closures;
 
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;

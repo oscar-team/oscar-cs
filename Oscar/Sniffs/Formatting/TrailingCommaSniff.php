@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace OscarStandard\Sniffs\Formatting;
+namespace Oscar\Sniffs\Formatting;
 
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;

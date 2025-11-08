@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace OscarStandard\Sniffs\Namespaces;
+namespace Oscar\Sniffs\Namespaces;
 
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;
