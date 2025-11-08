@@ -78,7 +78,16 @@ final class ShortClosureSniff implements Sniff
             return;
         }
 
-        if ($beforeArrow['code'] !== T_WHITESPACE || strpos($beforeArrow['content'], "\n") === false) {
+        $whitespacePtr = $arrowPtr - 1;
+        while ($whitespacePtr > $prevMeaningful && $tokens[$whitespacePtr]['code'] === T_WHITESPACE) {
+            if (strpos($tokens[$whitespacePtr]['content'], "\n") !== false) {
+                break;
+            }
+
+            $whitespacePtr--;
+        }
+
+        if ($whitespacePtr <= $prevMeaningful || $tokens[$whitespacePtr]['code'] !== T_WHITESPACE || strpos($tokens[$whitespacePtr]['content'], "\n") === false) {
             $phpcsFile->addError(
                 'When the short closure expression is moved to the next line, "=>" must start that new line with indentation (PER 3.0 §7.1).',
                 $arrowPtr,
@@ -88,8 +97,7 @@ final class ShortClosureSniff implements Sniff
             return;
         }
 
-        $indent = substr($beforeArrow['content'], strrpos($beforeArrow['content'], "\n") + 1);
-        if ($indent === '') {
+        if ($tokens[$arrowPtr]['column'] === 1) {
             $phpcsFile->addError(
                 'Short closure arrows placed on the next line MUST be indented (PER 3.0 §7.1).',
                 $arrowPtr,
