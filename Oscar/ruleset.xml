@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<ruleset name="Oscar">
+    <description>Coding standard for the Oscar technical team aligned with PER Coding Style 3.0.</description>
+
+    <rule ref="PSR12">
+        <exclude name="Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore"/>
+        <exclude name="Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine"/>
+    </rule>
+
+    <config name="tab_width" value="4"/>
+
+    <rule ref="Oscar.Namespaces.UseGrouping"/>
+    <rule ref="Oscar.Attributes.AttributePlacement"/>
+    <rule ref="Oscar.Closures.ShortClosure"/>
+    <rule ref="Oscar.Functions.EmptyBody"/>
+    <rule ref="Oscar.Formatting.TrailingComma"/>
+</ruleset>
