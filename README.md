@@ -3,7 +3,6 @@
 Coding standard for the Oscar technical team that layers project-specific sniffs on top of the PER Coding Style 3.0 specification. The standard is distributed as a PHP_CodeSniffer custom standard located at `OscarStandard/ruleset.xml`.
 
 ## Custom PER Sniffs
-- **Files.StrictTypesDeclaration** – enforces a `declare(strict_types=1)` header without internal whitespace and with a single blank line separating subsequent header blocks. (PER §3)
 - **Namespaces.UseGrouping** – rejects grouped `use` statements that append more than one namespace separator inside the group. (PER §3)
 - **Attributes.AttributePlacement** – validates attribute spacing, line placement, and parameter formatting, including adjacency to docblocks. (PER §12)
 - **Closures.ShortClosure** – enforces arrow function spacing, indentation and semicolon placement rules. (PER §7.1)

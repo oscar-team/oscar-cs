@@ -6,11 +6,6 @@
 
     <config name="tab_width" value="4"/>
 
-    <rule ref="OscarStandard.Files.StrictTypesDeclaration">
-        <properties>
-            <property name="allowMultipleDeclare" value="false"/>
-        </properties>
-    </rule>
     <rule ref="OscarStandard.Namespaces.UseGrouping"/>
     <rule ref="OscarStandard.Attributes.AttributePlacement"/>
     <rule ref="OscarStandard.Closures.ShortClosure"/>
