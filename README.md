@@ -7,6 +7,7 @@ Coding standard for the Oscar technical team that layers project-specific sniffs
 - **Attributes.AttributePlacement** – validates attribute spacing, line placement, and parameter formatting, including adjacency to docblocks. (PER §12)
 - **Closures.ShortClosure** – enforces arrow function spacing, indentation and semicolon placement rules. (PER §7.1)
 - **Functions.EmptyBody** – requires empty methods/functions to collapse to `{} ` inline bodies with a preceding space. (PER §4.4)
+- **Formatting.TrailingComma** – ensures multi-line lists end with a comma and single-line lists do not. (PER §2.6)
 
 All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR12` standard.
 

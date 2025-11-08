@@ -10,4 +10,5 @@
     <rule ref="OscarStandard.Attributes.AttributePlacement"/>
     <rule ref="OscarStandard.Closures.ShortClosure"/>
     <rule ref="OscarStandard.Functions.EmptyBody"/>
+    <rule ref="OscarStandard.Formatting.TrailingComma"/>
 </ruleset>
