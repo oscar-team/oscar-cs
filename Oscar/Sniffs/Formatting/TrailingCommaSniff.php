@@ -62,6 +62,7 @@ final class TrailingCommaSniff implements Sniff
             T_FN,
             T_OPEN_PARENTHESIS,
             T_USE,
+            T_MATCH,
         ];
     }
 
@@ -96,6 +97,10 @@ final class TrailingCommaSniff implements Sniff
 
             case T_USE:
                 $this->processClosureUse($phpcsFile, $stackPtr);
+                return;
+
+            case T_MATCH:
+                $this->processMatchExpression($phpcsFile, $stackPtr);
                 return;
         }
     }
@@ -202,6 +207,20 @@ final class TrailingCommaSniff implements Sniff
         }
 
         $this->checkList($phpcsFile, $open, $close, 'UseList');
+    }
+
+    private function processMatchExpression(File $phpcsFile, int $matchPtr): void
+    {
+        $tokens = $phpcsFile->getTokens();
+
+        if (!isset($tokens[$matchPtr]['scope_opener'], $tokens[$matchPtr]['scope_closer'])) {
+            return;
+        }
+
+        $open  = $tokens[$matchPtr]['scope_opener'];
+        $close = $tokens[$matchPtr]['scope_closer'];
+
+        $this->checkList($phpcsFile, $open, $close, 'MatchArms');
     }
 
     private function checkList(File $phpcsFile, int $openPtr, int $closePtr, string $context): void
