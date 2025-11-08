@@ -89,9 +89,9 @@ final class ShortClosureSniff implements Sniff
         }
 
         $indent = substr($beforeArrow['content'], strrpos($beforeArrow['content'], "\n") + 1);
-        if ($indent === '' || strlen($indent) < 4) {
+        if ($indent === '') {
             $phpcsFile->addError(
-                'Short closure arrows placed on the next line MUST be indented at least once (PER 3.0 §7.1).',
+                'Short closure arrows placed on the next line MUST be indented (PER 3.0 §7.1).',
                 $arrowPtr,
                 'ArrowIndentWidth'
             );
