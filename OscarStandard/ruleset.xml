@@ -13,4 +13,6 @@
     </rule>
     <rule ref="OscarStandard.Namespaces.UseGrouping"/>
     <rule ref="OscarStandard.Attributes.AttributePlacement"/>
+    <rule ref="OscarStandard.Closures.ShortClosure"/>
+    <rule ref="OscarStandard.Functions.EmptyBody"/>
 </ruleset>

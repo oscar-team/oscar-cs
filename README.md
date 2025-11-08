@@ -6,6 +6,8 @@ Coding standard for the Oscar technical team that layers project-specific sniffs
 - **Files.StrictTypesDeclaration** – enforces a `declare(strict_types=1)` header without internal whitespace and with a single blank line separating subsequent header blocks. (PER §3)
 - **Namespaces.UseGrouping** – rejects grouped `use` statements that append more than one namespace separator inside the group. (PER §3)
 - **Attributes.AttributePlacement** – validates attribute spacing, line placement, and parameter formatting, including adjacency to docblocks. (PER §12)
+- **Closures.ShortClosure** – enforces arrow function spacing, indentation and semicolon placement rules. (PER §7.1)
+- **Functions.EmptyBody** – requires empty methods/functions to collapse to `{} ` inline bodies with a preceding space. (PER §4.4)
 
 All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR12` standard.
 
