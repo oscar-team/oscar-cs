@@ -16,11 +16,24 @@ All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR
    ```bash
    composer global require squizlabs/php_codesniffer
    ```
-2. Register the Oscar standard so PHPCS can discover it:
+2. Install Oscar standard (globally or per-project), for example:
    ```bash
-   phpcs --config-set installed_paths "$(pwd)"
+   composer global require oscar-team/per-coding-standard
+   ```
+3. Register the Oscar standard so PHPCS can discover it:
+   ```bash
+   phpcs --config-set installed_paths path/to/oscar-team/per-coding-standard
+   ```
+   Example for global:
+   ```bash
+   phpcs --config-set installed_paths ~/.composer/vendor/oscar-team/per-coding-standard
+   ```
+   Example for project:
+   ```bash
+   phpcs --config-set installed_paths ~/Projects/my-project/vendor/oscar-team/per-coding-standard
    ```
    Alternatively, provide the ruleset path directly when running `phpcs`.
+4. Run `phpcs -i` to confirm that `Oscar` appears in the installed standards list.
 
 ## Usage
 - Analyse code:
@@ -31,8 +44,6 @@ All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR
   ```bash
   phpcbf --standard=Oscar path/to/your/php/files
   ```
-
-Use `phpcs -i` to confirm that `Oscar` appears in the installed standards list.
 
 ## Testing
 - Install dependencies with `composer install`.
