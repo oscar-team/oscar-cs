@@ -9,6 +9,13 @@
 
     <config name="tab_width" value="4"/>
 
+    <!-- Don't flag comment-only lines (e.g. long docblock lines) for line length -->
+    <rule ref="Generic.Files.LineLength">
+        <properties>
+            <property name="ignoreComments" value="true"/>
+        </properties>
+    </rule>
+
     <rule ref="Oscar.Namespaces.UseGrouping"/>
     <rule ref="Oscar.Attributes.AttributePlacement"/>
     <rule ref="Oscar.Closures.ShortClosure"/>
