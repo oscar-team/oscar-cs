@@ -90,6 +90,17 @@ check_prerequisites() {
     fi
 }
 
+# check_report_dir <report_file>
+# Exits with a clear error if the parent directory of the report file does not exist.
+check_report_dir() {
+    local dir
+    dir="$(dirname "$1")"
+    if [[ ! -d "${dir}" ]]; then
+        echo "Error: report directory '${dir}' does not exist." >&2
+        return 1
+    fi
+}
+
 # setup_git_safety <stash_label>
 # Saves the current HEAD, optionally stashes uncommitted changes (with user confirmation),
 # defines the cleanup() function, and installs EXIT/INT/TERM traps.

@@ -176,7 +176,7 @@ To check whether a stash was left behind: `git stash list` — look for an entry
 
 The script needs to be accessible in the CI environment. Two supported approaches:
 
-### Option B — HTTPS clone with a GitHub PAT
+### Option A — HTTPS clone with a GitHub PAT
 
 Clone `oscar-cs` on the fly using a fine-grained GitHub Personal Access Token stored as a masked CI variable (`OSCAR_CS_GITHUB_TOKEN`, read-only access to this repo is enough). No SSH key or agent setup required.
 
@@ -193,7 +193,7 @@ script:
 
 Use exit code `2` for the setup chain so infrastructure failures are distinguishable from actual violations (exit `1`) and can be kept advisory even in enforcing mode.
 
-### Option C — Composer dev dependency (recommended)
+### Option B — Composer dev dependency (recommended)
 
 Add `oscar-team/per-coding-standard` and `squizlabs/php_codesniffer` to the project's `composer.json` as dev dependencies. After `composer install`, the script is available at `vendor/oscar-team/per-coding-standard/scripts/` and phpcs at `vendor/bin/phpcs`. No clone step needed in CI.
 

@@ -69,6 +69,7 @@ if [[ -n "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
 else
     REPORT_FILE="${PHPCS_REPORT_FILE:-${REPORT_DIR}/phpcs-report-codebase-${BRANCH_SAFE}-vs-${BASE_SAFE}-$(date +%Y%m%d-%H%M%S).txt}"
 fi
+check_report_dir "${REPORT_FILE}"
 
 # ── ref validation ─────────────────────────────────────────────────────────────
 if ! git -C "${GIT_ROOT}" rev-parse "${BRANCH_REF}" >/dev/null 2>&1; then

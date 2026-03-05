@@ -70,6 +70,7 @@ BASE_SAFE="$(sanitize_branch "${BASE_BRANCH}")"
 REPORT_DIR="${PHPCS_REPORT_PATH:-${PWD}}"
 REPORT_DIR="${REPORT_DIR%/}"
 REPORT_FILE="${PHPCS_REPORT_FILE:-${REPORT_DIR}/phpcs-report-${CURRENT_SAFE}-to-${BASE_SAFE}-$(date +%Y%m%d-%H%M%S).txt}"
+check_report_dir "${REPORT_FILE}"
 
 # ── ref validation ─────────────────────────────────────────────────────────────
 if ! git -C "${GIT_ROOT}" rev-parse "${CURRENT_REF}" >/dev/null 2>&1; then
@@ -171,10 +172,13 @@ report_path_to_relative() {
 is_in_diff() {
     local r="$1" a r_suffix
     for a in "${EXISTING_FILES[@]}"; do
-        if [[ "$r" == "$a" || "$a" == *"$r" || "$r" == *"$a" ]]; then return 0; fi
+        if [[ "$r" == "$a" ]]; then return 0; fi
+        # phpcs truncates long paths mid-word with "..." (e.g. "...ev/path/to/file.php").
+        # Strip the unrecoverable leading fragment up to the first "/" to get a suffix that
+        # starts at a genuine directory boundary, then require a "/" boundary in the match.
         if [[ "$r" == ...* ]]; then
             r_suffix="${r#*/}"
-            if [[ -n "$r_suffix" && ("$a" == *"$r_suffix" || "${a#*/}" == "$r_suffix") ]]; then return 0; fi
+            if [[ -n "$r_suffix" && ( "$a" == "$r_suffix" || "$a" == */"$r_suffix" ) ]]; then return 0; fi
         fi
     done
     return 1
@@ -211,7 +215,7 @@ filter_report_to_changed_lines() {
                 current_file="${current_file#*/}"
             fi
             for a in "${EXISTING_FILES[@]}"; do
-                if [[ "$a" == *"$current_file" || "${a#*/}" == "$current_file" ]]; then
+                if [[ "$a" == "$current_file" || "$a" == */"$current_file" || "${a#*/}" == "$current_file" ]]; then
                     current_file="$a"
                     break
                 fi
