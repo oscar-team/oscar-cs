@@ -81,6 +81,13 @@ if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     fi
 fi
 
+# ── untracked conflict preflight ──────────────────────────────────────────────
+if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
+    check_untracked_conflicts "${BASE_REF}" "${BRANCH_REF}"
+else
+    check_untracked_conflicts "${BRANCH_REF}"
+fi
+
 # ── git safety (stash, cleanup, traps) ────────────────────────────────────────
 setup_git_safety "validate-codebase-oscar-cs temporary stash"
 

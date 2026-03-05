@@ -101,6 +101,37 @@ check_report_dir() {
     fi
 }
 
+# check_untracked_conflicts <ref...>
+# Exits with a clear error if any untracked working-tree files would be
+# overwritten by a checkout to any of the given refs.
+# Only files Added in <ref> relative to HEAD are checked: files already
+# tracked in HEAD cannot be untracked locally, so they cannot conflict.
+# Requires GIT_ROOT to be set.
+check_untracked_conflicts() {
+    local -a untracked=()
+    mapfile -t untracked < <(git -C "${GIT_ROOT}" ls-files --others --exclude-standard 2>/dev/null)
+    [[ ${#untracked[@]} -eq 0 ]] && return 0
+
+    declare -A untracked_set=()
+    local f
+    for f in "${untracked[@]}"; do untracked_set["$f"]=1; done
+
+    local ref
+    local -a conflicts=()
+    for ref in "$@"; do
+        while IFS= read -r f; do
+            [[ -n "${untracked_set["$f"]+_}" ]] && conflicts+=("$f")
+        done < <(git -C "${GIT_ROOT}" diff --name-only --diff-filter=A HEAD "${ref}" 2>/dev/null || true)
+    done
+
+    if [[ ${#conflicts[@]} -gt 0 ]]; then
+        echo "Error: untracked files would be overwritten by checkout:" >&2
+        printf '  %s\n' "${conflicts[@]}" >&2
+        echo "Move or remove them before running this script." >&2
+        return 1
+    fi
+}
+
 # setup_git_safety <stash_label>
 # Saves the current HEAD, optionally stashes uncommitted changes (with user confirmation),
 # defines the cleanup() function, and installs EXIT/INT/TERM traps.
