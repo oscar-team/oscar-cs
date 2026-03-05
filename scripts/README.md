@@ -191,7 +191,7 @@ script:
   - bash /tmp/oscar-cs/scripts/validate-pr-oscar-cs.sh "$CI_PROJECT_DIR" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
 ```
 
-Use exit code `2` for the setup chain so infrastructure failures are distinguishable from actual violations (exit `1`) and can be kept advisory even in enforcing mode.
+If the clone or install fails the job exits non-zero, which is advisory in the default setup (`allow_failure: true`). In enforcing mode, consider whether a failed clone should block — if not, add `|| { echo "Warning: setup failed, skipping."; exit 0; }` to the setup chain.
 
 ### Option B — Composer dev dependency (recommended)
 
@@ -229,11 +229,8 @@ phpcs-pr:
   dependencies:
     - build-php   # provides vendor/ artifact
   script:
-    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" || exit 2
-    - bash vendor/oscar-team/per-coding-standard/scripts/validate-pr-oscar-cs.sh
-        "$CI_PROJECT_DIR"
-        "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME"
-        "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+    - bash vendor/oscar-team/per-coding-standard/scripts/validate-pr-oscar-cs.sh "$CI_PROJECT_DIR" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
   artifacts:
     when: always
     paths:

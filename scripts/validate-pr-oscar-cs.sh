@@ -80,6 +80,9 @@ if ! git -C "${GIT_ROOT}" rev-parse "${BASE_REF}" >/dev/null 2>&1; then
     echo "Error: base ref '${BASE_BRANCH}' (resolved: ${BASE_REF}) not found." >&2; exit 1
 fi
 
+# ── untracked conflict preflight ──────────────────────────────────────────────
+check_untracked_conflicts "${CURRENT_REF}"
+
 # ── git safety (stash, cleanup, traps) ────────────────────────────────────────
 setup_git_safety "validate-pr-oscar-cs temporary stash"
 
