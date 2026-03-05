@@ -54,3 +54,11 @@ All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR
 - Sniffs live under `Oscar/Sniffs`.
 - Error codes on each sniff reference the matching PER section to aid suppression and maintenance.
 - Extend the ruleset by adding new `<rule>` entries under `Oscar/ruleset.xml`; PHPCS will autoload them via the configured installed path.
+
+### Line length (120 chars) — known acceptable violations
+The rule `Generic.Files.LineLength` (with `ignoreComments` enabled) skips any line whose only non-whitespace content is a comment token (docblocks `/** */`, block comments `/* */`, and inline `//` comments — including indented ones). Only actual code lines are checked.
+
+Some code lines are legitimately long and acceptable to leave as-is:
+
+- **Language/translation files** — Long lines in `resources/lang/*` (translation strings) are common; splitting can hurt readability or i18n tooling. Treat as acceptable when appropriate.
+- **Config files with long string values** — Array values with long env()-calls, URLs, or human-readable strings (e.g. `'description' => 'Comprehensive API...'`) may be awkward to split. Break across lines or use `// phpcs:ignore Generic.Files.LineLength` for that specific line if splitting hurts readability.
