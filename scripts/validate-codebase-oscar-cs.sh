@@ -196,9 +196,17 @@ fi
 
 append_summary "${REPORT_FILE}"
 
-if grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+(ERROR|WARNING)' "${REPORT_FILE}"; then
+_has_errors=0
+_has_warnings=0
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+ERROR' "${REPORT_FILE}"   && _has_errors=1   || true
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+WARNING' "${REPORT_FILE}" && _has_warnings=1 || true
+
+if [[ $_has_errors -eq 1 ]] || [[ $_has_warnings -eq 1 && "${PHPCS_FAIL_ON_WARNINGS:-0}" == "1" ]]; then
     echo "Report written to ${REPORT_FILE} (violations found)." >&2
     exit 1
+elif [[ $_has_warnings -eq 1 ]]; then
+    echo "Report written to ${REPORT_FILE} (warnings only, not failing — set PHPCS_FAIL_ON_WARNINGS=1 to fail on warnings)."
+    exit 0
 else
     echo "Report written to ${REPORT_FILE} (no violations)."
     exit 0

@@ -26,6 +26,12 @@ For a detailed explanation of the internal logic, see [VALIDATION-LOGIC.md](VALI
 | `PHPCS_REPORT_PATH` | Directory where the report file is written (default: current working directory). The filename is always auto-generated (branches + timestamp). |
 | `PHPCS_REPORT_FILE` | Full path override. Takes precedence over `PHPCS_REPORT_PATH`. |
 
+**Exit behaviour** — controlled by environment variables:
+
+| Variable | Default | Effect |
+|----------|---------|--------|
+| `PHPCS_FAIL_ON_WARNINGS` | `0` | Set to `1` to exit 1 on warnings as well as errors. By default only errors cause a non-zero exit. |
+
 ---
 
 ### Running from oscar-cs/scripts/
@@ -149,7 +155,7 @@ In CI the working tree is always clean, so this prompt never appears.
 - Written to **`PHPCS_REPORT_PATH`** (directory) with an auto-generated timestamped filename, or to the **current working directory** if `PHPCS_REPORT_PATH` is not set.
 - Set `PHPCS_REPORT_FILE` (full path) to override the filename entirely.
 - A **summary** is appended at the end: total errors/warnings, then a breakdown by type sorted by count (most frequent first).
-- **Exit code**: `0` if no violations; `1` if violations were found (suitable for CI).
+- **Exit code**: `0` if no violations or warnings only; `1` if errors are found. Set `PHPCS_FAIL_ON_WARNINGS=1` to also exit `1` on warnings.
 
 ## Interrupting the scripts
 
@@ -226,6 +232,7 @@ phpcs-pr:
   variables:
     GIT_DEPTH: 0
     PHPCS_REPORT_FILE: "$CI_PROJECT_DIR/phpcs-report.txt"
+    PHPCS_FAIL_ON_WARNINGS: "0"  # set to "1" to also fail on warnings
   dependencies:
     - build-php   # provides vendor/ artifact
   script:
@@ -238,7 +245,7 @@ phpcs-pr:
     expire_in: 30 days
 ```
 
-Set `PHPCS_ENFORCE=1` in GitLab → Settings → CI/CD → Variables to switch from advisory (warning) to blocking mode. No YAML change required.
+Set `PHPCS_ENFORCE=1` in GitLab → Settings → CI/CD → Variables to switch from advisory to blocking mode. Set `PHPCS_FAIL_ON_WARNINGS=1` to also block on warnings (errors always block when enforcing). No YAML change required for either.
 
 ---
 

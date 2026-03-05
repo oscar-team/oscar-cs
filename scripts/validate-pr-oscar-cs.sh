@@ -129,11 +129,13 @@ fi
 
 # ── changed-line set (+ lines only, not context lines) ────────────────────────
 declare -A CHANGED_LINE_SET
+declare -i CHANGED_LINE_COUNT=0
 if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     echo "Restricting to violations on changed lines only (default). Set PHPCS_REPORT_ALL_LINES=1 for full-file report."
     for f in "${EXISTING_FILES[@]}"; do
         while IFS= read -r lineno; do
             CHANGED_LINE_SET["${f}:${lineno}"]=1
+            CHANGED_LINE_COUNT=$(( CHANGED_LINE_COUNT + 1 ))
         done < <(
             git -C "${GIT_ROOT}" diff "${BASE_REF}"..."${CURRENT_REF}" -- "$f" 2>/dev/null | awk '
                 /^\+\+\+ / { next }
@@ -255,21 +257,26 @@ filter_report_to_changed_lines() {
     flush_block
 }
 
-if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" && ${#CHANGED_LINE_SET[@]} -gt 0 ]]; then
+if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" && "${CHANGED_LINE_COUNT}" -gt 0 ]]; then
     FILTER_TMP="$(mktemp)"; TMPFILES+=("${FILTER_TMP}")
     filter_report_to_changed_lines "${REPORT_FILE}" > "${FILTER_TMP}"
     mv "${FILTER_TMP}" "${REPORT_FILE}"
-    if ! grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+(ERROR|WARNING)' "${REPORT_FILE}"; then
-        PHPCS_EXIT=0
-    fi
 fi
 
 append_summary "${REPORT_FILE}"
 
-if [[ $PHPCS_EXIT -eq 0 ]]; then
-    echo "Report written to ${REPORT_FILE} (no violations)."
-    exit 0
-else
+_has_errors=0
+_has_warnings=0
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+ERROR' "${REPORT_FILE}"   && _has_errors=1   || true
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+WARNING' "${REPORT_FILE}" && _has_warnings=1 || true
+
+if [[ $_has_errors -eq 1 ]] || [[ $_has_warnings -eq 1 && "${PHPCS_FAIL_ON_WARNINGS:-0}" == "1" ]]; then
     echo "Report written to ${REPORT_FILE} (violations found)." >&2
     exit 1
+elif [[ $_has_warnings -eq 1 ]]; then
+    echo "Report written to ${REPORT_FILE} (warnings only, not failing — set PHPCS_FAIL_ON_WARNINGS=1 to fail on warnings)."
+    exit 0
+else
+    echo "Report written to ${REPORT_FILE} (no violations)."
+    exit 0
 fi
