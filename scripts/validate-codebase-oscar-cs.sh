@@ -13,7 +13,7 @@
 #   - No source files are modified (read-only analysis).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib-oscar-cs.sh
 source "${SCRIPT_DIR}/lib-oscar-cs.sh"
 check_bash_version
@@ -94,47 +94,63 @@ setup_git_safety "validate-codebase-oscar-cs temporary stash"
 # ── phpcs runner ──────────────────────────────────────────────────────────────
 run_phpcs() {
     local out="$1"
+    # phpcs exit codes: 0 = no violations, 1 = violations found, 2 = violations found
+    # and some are auto-fixable (phpcbf can fix them), ≥3 = tool/config error.
+    # Only ≥3 is a hard failure; suppress 0–2 so the caller can continue normally.
+    local _exit=0
     (cd "${SITE_FULL}" && "${PHPCS_BIN}" \
         -d memory_limit=512M \
         --standard="${RULESET}" \
         --extensions=php \
-        --ignore=*/vendor/*,*/node_modules/*,*/storage/* \
+        --ignore='*/vendor/*,*/node_modules/*,*/storage/*' \
         --report-file="${out}" \
-        .) || true
+        .) || _exit=$?
     # phpcs may delete the report file when killed mid-run; recreate it as empty
     # so any code that reads it after an interrupt gets EOF rather than an error.
     touch "${out}" 2>/dev/null || true
+    if [[ $_exit -ge 3 ]]; then
+        echo "Error: phpcs exited with code ${_exit} (tool or configuration failure); the report may be incomplete." >&2
+        exit 2
+    fi
 }
 
 # ── violation key extraction ──────────────────────────────────────────────────
 extract_violation_keys() {
     local report="$1" cur_file=""
+    local _re_viol='^[[:space:]]*([0-9]+)[[:space:]]+[|][[:space:]]+(ERROR|WARNING)[[:space:]]+[|][[:space:]]*(.+)'
     while IFS= read -r line; do
         if [[ "$line" == FILE:* ]]; then
             cur_file="${line#FILE: }"
             cur_file="${cur_file%%[[:space:]]*}"
             [[ "$cur_file" == *"${SITE_NAME}/"* ]] && cur_file="${cur_file#*${SITE_NAME}/}"
-        elif [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+\|[[:space:]]+(ERROR|WARNING)[[:space:]]+\|[[:space:]]*(.+) ]]; then
+        elif [[ "$line" =~ $_re_viol ]]; then
             printf '%s:%s:%s:%s\n' "$cur_file" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
         fi
     done < "$report"
 }
 
 # ── new-violations filter ─────────────────────────────────────────────────────
-# Reads current phpcs report ($1), subtracts violation keys from base keys file ($2),
+# Reads current phpcs report ($1), keeps only violations whose key appears in
+# the precomputed new-keys file ($2; lines not in base, produced by comm -23),
 # writes filtered report to stdout. FILE blocks with no remaining violations are suppressed.
 # flush_block is provided by lib-oscar-cs.sh (dynamic scoping: accesses buffer, kept_* locals).
+# $2: file of NEW violation keys (lines in current but not in base), pre-sorted.
+# Loads new_keys_file into an associative array once for O(1) in-memory lookups.
 filter_new_violations() {
     local current_report="$1"
-    local base_keys_file="$2"
+    local new_keys_file="$2"
     local cur_file="" keep_violation=0 kept_any=0
     local kept_errors=0 kept_warnings=0 kept_fixable=0
     local -A kept_line_nums=()
     local -a buffer=()
-    declare -A base_keys=()
-    while IFS= read -r key; do
-        base_keys["$key"]=1
-    done < "$base_keys_file"
+    local _re_viol='^[[:space:]]*([0-9]+)[[:space:]]+[|][[:space:]]+(ERROR|WARNING)[[:space:]]+[|][[:space:]]*(.+)'
+    local _re_cont='^[[:space:]]*[|]'
+
+    local -A new_keys_set=()
+    local _k
+    while IFS= read -r _k || [[ -n "$_k" ]]; do
+        [[ -n "$_k" ]] && new_keys_set["$_k"]=1
+    done < "$new_keys_file"
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == FILE:* ]]; then
@@ -144,10 +160,10 @@ filter_new_violations() {
             cur_file="${cur_file%%[[:space:]]*}"
             [[ "$cur_file" == *"${SITE_NAME}/"* ]] && cur_file="${cur_file#*${SITE_NAME}/}"
             keep_violation=0
-        elif [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+\|[[:space:]]+(ERROR|WARNING)[[:space:]]+\|[[:space:]]*(.+) ]]; then
+        elif [[ "$line" =~ $_re_viol ]]; then
             local lnum="${BASH_REMATCH[1]}" sev="${BASH_REMATCH[2]}" msg="${BASH_REMATCH[3]}"
             local key="${cur_file}:${lnum}:${sev}:${msg}"
-            if [[ -z "${base_keys[$key]+_}" ]]; then
+            if [[ -n "${new_keys_set["$key"]+_}" ]]; then
                 keep_violation=1; kept_any=1
                 if [[ "$sev" == "ERROR" ]]; then ((kept_errors++)) || true; else ((kept_warnings++)) || true; fi
                 [[ "$msg" == \[x\]* ]] && ((kept_fixable++)) || true
@@ -156,7 +172,7 @@ filter_new_violations() {
             else
                 keep_violation=0
             fi
-        elif [[ "$line" =~ ^[[:space:]]*\| ]]; then
+        elif [[ "$line" =~ $_re_cont ]]; then
             [[ $keep_violation -eq 1 ]] && buffer+=("$line")
         elif [[ "$line" =~ ^-+$ ]] || [[ "$line" =~ ^FOUND ]] || [[ "$line" =~ ^PHPCBF ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
             keep_violation=0; buffer+=("$line")
@@ -177,7 +193,7 @@ if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     run_phpcs "${BASE_REPORT}"
 
     BASE_KEYS="$(mktemp)"; TMPFILES+=("${BASE_KEYS}")
-    extract_violation_keys "${BASE_REPORT}" > "${BASE_KEYS}"
+    extract_violation_keys "${BASE_REPORT}" | sort > "${BASE_KEYS}"
     BASE_VIOLATION_COUNT="$(wc -l < "${BASE_KEYS}" | tr -d ' ')"
 
     CURRENT_REPORT="$(mktemp)"; TMPFILES+=("${CURRENT_REPORT}")
@@ -185,9 +201,18 @@ if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     git -C "${GIT_ROOT}" checkout -q "${BRANCH_REF}"
     run_phpcs "${CURRENT_REPORT}"
 
-    CURRENT_VIOLATION_COUNT="$(extract_violation_keys "${CURRENT_REPORT}" | wc -l | tr -d ' ')"
-    filter_new_violations "${CURRENT_REPORT}" "${BASE_KEYS}" > "${REPORT_FILE}"
-    echo "  Base violations: ${BASE_VIOLATION_COUNT} | Current violations: ${CURRENT_VIOLATION_COUNT}"
+    CURRENT_KEYS="$(mktemp)"; TMPFILES+=("${CURRENT_KEYS}")
+    extract_violation_keys "${CURRENT_REPORT}" | sort > "${CURRENT_KEYS}"
+    CURRENT_VIOLATION_COUNT="$(wc -l < "${CURRENT_KEYS}" | tr -d ' ')"
+
+    # comm -23: lines only in file1 (current, not in base) = genuinely new violations.
+    # Both files must be sorted, which extract_violation_keys | sort guarantees.
+    NEW_KEYS="$(mktemp)"; TMPFILES+=("${NEW_KEYS}")
+    comm -23 "${CURRENT_KEYS}" "${BASE_KEYS}" > "${NEW_KEYS}"
+
+    filter_new_violations "${CURRENT_REPORT}" "${NEW_KEYS}" > "${REPORT_FILE}"
+    NEW_VIOLATION_COUNT="$(wc -l < "${NEW_KEYS}" | tr -d ' ')"
+    echo "  Violations in ${BASE_BRANCH}: ${BASE_VIOLATION_COUNT} | in ${BRANCH}: ${CURRENT_VIOLATION_COUNT} | new (in report): ${NEW_VIOLATION_COUNT}"
 else
     echo "Scanning full codebase: ${BRANCH} (all violations)"
     git -C "${GIT_ROOT}" checkout -q "${BRANCH_REF}"

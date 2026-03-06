@@ -9,7 +9,7 @@ This document explains how the two validation scripts work internally.
 | `validate-pr-oscar-cs.sh` | 1 — to `CURRENT` | CI and local PR review |
 | `validate-codebase-oscar-cs.sh` | 2 — to `BASE`, then to `BRANCH` | Local audits only |
 
-Both scripts share the same bash version check, path/tool setup, branch resolution, git safety (stash, cleanup, traps), report block flushing (`flush_block`), and summary logic — all via `lib-oscar-cs.sh`.
+Both scripts are compatible with **bash 4+** and **zsh 5+**. They share the same shell version check, path/tool setup, branch resolution, git safety (stash, cleanup, traps), report block flushing (`flush_block`), and summary logic — all via `lib-oscar-cs.sh`.
 No source files are modified (no phpcbf).
 
 ---
@@ -62,6 +62,8 @@ For each file, `git diff BASE...CURRENT -- <file>` is parsed with `awk`:
 
 `cd` to `SITE_FULL` and run phpcs with the Oscar ruleset, `--extensions=php`, `--report-file=<REPORT_FILE>`, and the list of `EXISTING_FILES`.
 
+**Exit code handling:** phpcs exits `0` (no violations), `1` (violations found), or `2` (violations found and some are auto-fixable by phpcbf). All three are normal outcomes. Exit code `≥ 3` indicates a tool or configuration error; the script prints an error message and exits with code `2` immediately, before the report is interpreted.
+
 #### 6. Report validation
 
 The script checks that every `FILE: ...` path in the report corresponds to a file in the diff. phpcs paths may be absolute or truncated (`...pp/Models/Foo.php`); matching is by suffix. If any reported file is not in the diff, the script exits with an error.
@@ -101,11 +103,12 @@ See [Shared setup](#shared-setup) below.
 
 #### 2. Default: new violations only
 
-1. **Checkout base branch** (`PHPCS_BASE_BRANCH`, default `master`) and run phpcs on all PHP files in the site (with `--ignore=*/vendor/*,*/node_modules/*,*/storage/*`). Capture the report in a temp file. The temp file is `touch`ed after phpcs exits — phpcs deletes its `--report-file` when killed mid-run, so the `touch` ensures the file always exists for the next step even after an interrupt.
-2. **Extract violation keys** from the base report: one `file:line:severity:message` string per violation, with file paths normalised relative to the site. Load into an associative array.
-3. **Checkout the scan branch** and run phpcs again. Capture the report.
-4. **Filter new violations**: read the current report line by line; for each FILE block, emit only violations whose key is absent from the base set. FILE blocks with no remaining violations are suppressed. The `FOUND X ERRORS` and `PHPCBF CAN FIX...` lines are rewritten with correct counts.
-5. Write the filtered report to the output file.
+1. **Checkout base branch** (`PHPCS_BASE_BRANCH`, default `master`) and run phpcs on all PHP files in the site (with `--ignore=*/vendor/*,*/node_modules/*,*/storage/*`). Capture the report in a temp file. The temp file is `touch`ed after phpcs exits — phpcs deletes its `--report-file` when killed mid-run, so the `touch` ensures the file always exists for the next step even after an interrupt. phpcs exit codes `0`–`2` are treated as normal (see PR script step 5 for the exit code table); `≥ 3` aborts immediately.
+2. **Extract and sort base violation keys**: run `extract_violation_keys` on the base report to produce one `file:line:severity:message` string per violation (file paths normalised relative to the site), pipe through `sort`, and save to a temp file (`BASE_KEYS`).
+3. **Checkout the scan branch** and run phpcs again. Extract and sort the current violation keys into a second temp file (`CURRENT_KEYS`).
+4. **Compute new keys**: `comm -23 CURRENT_KEYS BASE_KEYS` — lines present in the current set but absent from the base. The result (`NEW_KEYS`) contains only genuinely new violation keys. Because both files are pre-sorted, `comm` runs in O(n) time without any shell associative arrays.
+5. **Filter new violations**: read the current phpcs report line by line; for each FILE block, emit only violations whose key appears in `NEW_KEYS`. At function entry `NEW_KEYS` is loaded once into a `local -A` associative array for O(1) per-violation lookups — avoids spawning a subprocess per line. FILE blocks with no remaining violations are suppressed. The `FOUND X ERRORS` and `PHPCBF CAN FIX...` lines are rewritten with correct counts.
+6. Write the filtered report to the output file. The progress line printed at this point shows: `Violations in <BASE>: X | in <BRANCH>: Y | new (in report): Z` where Z is the line count of `NEW_KEYS`. Because keys include line numbers, violations that shifted position due to added/removed code will appear in Z even if the underlying issue is the same — see "Conservative by design" note below.
 
 **Conservative by design:** matching is exact (same file path, line number, severity, and message). If surrounding code shifts line numbers in the scan branch, a violation may appear "new" because its line number changed. This means the comparison can over-report, but it will never miss a genuinely introduced violation.
 
@@ -136,6 +139,19 @@ Branches are resolved so remote-only refs work:
 - Otherwise the ref is used as-is (may fail later with a clear error).
 
 So you can pass `Billie-new-flow` even when only `origin/Billie-new-flow` exists.
+
+### Shell compatibility
+
+The scripts target **bash 4+** and **zsh 5+**. Key compatibility measures in `lib-oscar-cs.sh`:
+
+- `[[ -n "${ZSH_VERSION:-}" ]] && setopt BASH_REMATCH KSH_ARRAYS` — enables bash-compatible `${BASH_REMATCH[N]}` capture groups and 0-based array indexing in zsh. Safe no-op under bash (guarded by `ZSH_VERSION`).
+- Regex patterns containing `|` are stored in local variables (e.g. `local _re_viol='...'`) and referenced unquoted (`[[ $line =~ $_re_viol ]]`). This prevents zsh from parsing `|` as a pipe operator at parse time.
+- `mapfile` (bash-only) is replaced with `while IFS= read -r` loops.
+- `${BASH_SOURCE[0]:-$0}` for script-directory resolution works in both shells.
+- `flush_block` iterates over the buffer with `for _bline in "${buffer[@]}"` (value iteration) instead of `for i in "${!buffer[@]}"` (index iteration), avoiding the bash-only `${!array[@]}` syntax.
+- `declare -A` / `declare -i` (bash builtins) are replaced with `local -A` inside functions and `typeset -A` / `typeset -i` at script scope. Both forms are cross-shell safe; `declare` is available in zsh only as an alias for `typeset` and may behave differently under some zsh configurations.
+- The `validate-codebase-oscar-cs.sh` comparison uses `sort` + `comm -23` to produce the new-key set. `filter_new_violations` then loads that set into a `local -A` array once per run, which works identically in bash 4+ and zsh 5+.
+- Associative array subscripts are always double-quoted (`["$key"]`). In zsh, an unquoted subscript is treated as a glob pattern, so a key containing `[x]` would be interpreted as a character class matching `x` rather than a literal lookup, silently dropping violations whose message starts with `[x]`.
 
 ### Uncommitted changes and stash
 
@@ -175,8 +191,8 @@ The `cleanup` function:
 `append_summary` (in `lib-oscar-cs.sh`) scans the final report for `  <n> | ERROR | ...` and `  <n> | WARNING | ...` lines:
 
 - Counts total errors and warnings.
-- Normalizes messages (strips variable parts like "; contains 121 characters") and groups identical messages.
-- Appends a **SUMMARY (generated)** section with totals and "By error type" / "By warning type" lists, **sorted by count descending** (most frequent first).
+- Normalizes messages (strips variable parts like "; contains 121 characters") and streams them to two temporary files (one per severity) rather than accumulating them in shell arrays — keeps memory proportional to unique message types, not total violations.
+- Appends a **SUMMARY (generated)** section with totals and "By error type" / "By warning type" lists produced by `sort | uniq -c | sort -rn`, **sorted by count descending** (most frequent first).
 
 ---
 
@@ -218,3 +234,10 @@ All four were pre-existing violations that an earlier implementation incorrectly
 | Match truncated report paths by suffix | PHPCS can shorten paths; suffix matching ensures they are not treated as "not in diff". |
 | Summary sorted by count descending | Most frequent violation types appear first, making the summary easier to act on. |
 | `PHPCS_REPORT_PATH` sets the output directory | Decouples the directory choice from the filename; the filename is always auto-generated with branch names and a timestamp. |
+| bash 4+ and zsh 5+ both supported | zsh is the macOS default since Catalina; supporting it removes the Homebrew bash install requirement for local use. bash remains the shebang for Linux CI compatibility. |
+| `sort` + `comm -23` for base/current key diff (codebase script) | Shell associative array subscript lookups behave inconsistently across bash and zsh versions — `${assoc[$key]+_}` and `${assoc[$key]:-}` do not reliably detect key existence in all zsh configurations. `comm -23` on pre-sorted files is O(n), portable, and has no shell-version dependencies. |
+| `local -A` in `filter_new_violations` for new-key membership | Loading `NEW_KEYS` into an in-memory associative array once at function entry replaces per-line `grep -qxF` subprocess calls. Eliminates O(n) process spawns; memory stays proportional to unique new keys, not total violation lines. All subscript accesses use `["$key"]` (quoted) so zsh treats them as literal lookups rather than glob patterns. |
+| `local -A` / `typeset -A` instead of `declare -A` | `declare` is a bash builtin; in zsh it is an alias for `typeset` that may not honour all flags inside functions. `local -A` is correct and cross-shell inside functions; `typeset -A` / `typeset -i` are correct at script scope in both shells. |
+| phpcs exit codes 0–2 treated as success; ≥3 as hard failure | phpcs 3.x exits `0` (clean), `1` (violations found), `2` (fixable violations found). Treating `2` as a tool error would abort every scan that contains auto-fixable issues. Exit `≥ 3` reliably indicates a config or runtime error in all known phpcs versions. |
+| Temp files in `append_summary` instead of shell arrays | Building message arrays in bash grows O(n) in total violations. Streaming normalized keys to two `mktemp` files and aggregating with `sort \| uniq -c \| sort -rn` keeps shell memory proportional to unique message types regardless of report size. Both temp files are registered in `TMPFILES` immediately after creation so the shared `cleanup()` trap removes them on any exit path, not just normal completion. |
+| Regex patterns stored in local variables before `[[ =~ ]]` | In zsh, `|` inside an unquoted regex literal in `[[ ]]` is parsed as a pipe operator at parse time, causing "bad pattern" errors. Storing the pattern in a variable means the shell only sees `$varname` at parse time; the `|` inside the value is safe. |

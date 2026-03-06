@@ -12,7 +12,7 @@
 #   - No source files are modified (read-only analysis).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib-oscar-cs.sh
 source "${SCRIPT_DIR}/lib-oscar-cs.sh"
 check_bash_version
@@ -95,10 +95,13 @@ else
     SITE_REL="${SITE_FULL#${GIT_ROOT}/}"
 fi
 
+CHANGED_FILES=()
 if [[ -z "${SITE_REL}" ]]; then
-    mapfile -t CHANGED_FILES < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" 2>/dev/null | grep '\.php$' || true)
+    while IFS= read -r _f; do CHANGED_FILES+=("$_f"); done \
+        < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" 2>/dev/null | grep '\.php$' || true)
 else
-    mapfile -t CHANGED_FILES < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" -- "${SITE_REL}" 2>/dev/null | grep '\.php$' || true)
+    while IFS= read -r _f; do CHANGED_FILES+=("$_f"); done \
+        < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" -- "${SITE_REL}" 2>/dev/null | grep '\.php$' || true)
 fi
 
 if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
@@ -128,8 +131,8 @@ if [[ ${#EXISTING_FILES[@]} -eq 0 ]]; then
 fi
 
 # ── changed-line set (+ lines only, not context lines) ────────────────────────
-declare -A CHANGED_LINE_SET
-declare -i CHANGED_LINE_COUNT=0
+typeset -A CHANGED_LINE_SET
+typeset -i CHANGED_LINE_COUNT=0
 if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     echo "Restricting to violations on changed lines only (default). Set PHPCS_REPORT_ALL_LINES=1 for full-file report."
     for f in "${EXISTING_FILES[@]}"; do
@@ -154,9 +157,14 @@ if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
 fi
 
 # ── run phpcs ─────────────────────────────────────────────────────────────────
+# phpcs exit codes: 0 = no violations, 1 = violations found, 2 = violations found
+# and some are auto-fixable (phpcbf can fix them), ≥3 = tool/config error.
+# Only ≥3 is a hard failure; 0–2 all mean the run completed successfully.
 PHPCS_EXIT=0
-if ! (cd "${SITE_FULL}" && "${PHPCS_BIN}" --standard="${RULESET}" --extensions=php --report-file="${REPORT_FILE}" "${EXISTING_FILES[@]}"); then
-    PHPCS_EXIT=1
+(cd "${SITE_FULL}" && "${PHPCS_BIN}" --standard="${RULESET}" --extensions=php --report-file="${REPORT_FILE}" "${EXISTING_FILES[@]}") || PHPCS_EXIT=$?
+if [[ $PHPCS_EXIT -ge 3 ]]; then
+    echo "Error: phpcs exited with code ${PHPCS_EXIT} (tool or configuration failure); the report may be incomplete." >&2
+    exit 2
 fi
 
 # ── validate report only contains diff files ──────────────────────────────────
@@ -209,6 +217,8 @@ filter_report_to_changed_lines() {
     local kept_errors=0 kept_warnings=0 kept_fixable=0
     local -A kept_line_nums=()
     local -a buffer=()
+    local _re_viol='^[[:space:]]*([0-9]+)[[:space:]]+[|][[:space:]]+(ERROR|WARNING)[[:space:]]+[|][[:space:]]*(.+)'
+    local _re_cont='^[[:space:]]*[|]'
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == FILE:* ]]; then
@@ -227,7 +237,7 @@ filter_report_to_changed_lines() {
             done
             keep_this_violation=0
         elif [[ $in_block -eq 1 ]]; then
-            if [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+\|[[:space:]]+(ERROR|WARNING)[[:space:]]+\|[[:space:]]*(.+) ]]; then
+            if [[ "$line" =~ $_re_viol ]]; then
                 local line_num="${BASH_REMATCH[1]}" sev="${BASH_REMATCH[2]}" msg="${BASH_REMATCH[3]}"
                 if [[ -n "${CHANGED_LINE_SET["${current_file}:${line_num}"]:-}" ]]; then
                     keep_this_violation=1
@@ -239,7 +249,7 @@ filter_report_to_changed_lines() {
                 else
                     keep_this_violation=0
                 fi
-            elif [[ "$line" =~ ^[[:space:]]*\| ]]; then
+            elif [[ "$line" =~ $_re_cont ]]; then
                 [[ $keep_this_violation -eq 1 ]] && buffer+=("$line")
             elif [[ "$line" =~ ^-+$ ]] || [[ "$line" =~ ^FOUND ]] || [[ "$line" =~ ^PHPCBF ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
                 keep_this_violation=0

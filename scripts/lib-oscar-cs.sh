@@ -1,15 +1,27 @@
 #!/usr/bin/env bash
 # Shared helpers for validate-pr-oscar-cs.sh and validate-codebase-oscar-cs.sh.
 # Source this file; do not execute directly.
+# Compatible with bash 4+ and zsh 5+. Invoke main scripts as:
+#   bash validate-*.sh ...   (or ./validate-*.sh on systems with bash 4+)
+#   zsh  validate-*.sh ...   (macOS default shell; no extra installs needed)
+
+# zsh: enable bash-compatible BASH_REMATCH captures and 0-based array indexing.
+# In bash, ZSH_VERSION is unset so this no-ops safely (even on bash 3).
+[[ -n "${ZSH_VERSION:-}" ]] && setopt BASH_REMATCH KSH_ARRAYS 2>/dev/null || true
 
 # check_bash_version
-# Exits with a clear message if bash < 4 is detected.
-# Call this immediately after sourcing the lib (the lib itself is safe to source on bash 3
-# because it contains only function definitions with no top-level bash-4+ syntax).
+# Exits with a clear message if the shell is unsupported (bash < 4 or zsh < 5).
+# Call this immediately after sourcing the lib.
 check_bash_version() {
-    if [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+    if [[ -n "${ZSH_VERSION:-}" ]]; then
+        local major="${ZSH_VERSION%%.*}"
+        if [[ "$major" -lt 5 ]]; then
+            echo "Error: zsh 5 or later is required (found zsh ${ZSH_VERSION})." >&2
+            exit 1
+        fi
+    elif [[ "${BASH_VERSINFO[0]}" -lt 4 ]]; then
         echo "Error: bash 4 or later is required (found bash ${BASH_VERSION})." >&2
-        echo "On macOS, install a newer bash via Homebrew: brew install bash" >&2
+        echo "On macOS, run with zsh (built-in) or install bash 4+ via Homebrew: brew install bash" >&2
         exit 1
     fi
 }
@@ -109,10 +121,11 @@ check_report_dir() {
 # Requires GIT_ROOT to be set.
 check_untracked_conflicts() {
     local -a untracked=()
-    mapfile -t untracked < <(git -C "${GIT_ROOT}" ls-files --others --exclude-standard 2>/dev/null)
+    while IFS= read -r _f; do untracked+=("$_f"); done \
+        < <(git -C "${GIT_ROOT}" ls-files --others --exclude-standard 2>/dev/null)
     [[ ${#untracked[@]} -eq 0 ]] && return 0
 
-    declare -A untracked_set=()
+    local -A untracked_set=()
     local f
     for f in "${untracked[@]}"; do untracked_set["$f"]=1; done
 
@@ -194,19 +207,18 @@ flush_block() {
         local warn_word="WARNINGS"; [[ $kept_warnings -eq 1 ]] && warn_word="WARNING"
         local line_word="LINES"; [[ $total_lines -eq 1 ]] && line_word="LINE"
         local found_line="FOUND ${kept_errors} ${err_word} AND ${kept_warnings} ${warn_word} AFFECTING ${total_lines} ${line_word}"
-        local i
-        for i in "${!buffer[@]}"; do
-            if [[ "${buffer[$i]}" =~ ^FOUND ]]; then
-                buffer[$i]="$found_line"
-            elif [[ "${buffer[$i]}" =~ ^PHPCBF ]]; then
-                if [[ $kept_fixable -gt 0 ]]; then
-                    buffer[$i]="PHPCBF CAN FIX THE ${kept_fixable} MARKED SNIFF VIOLATIONS AUTOMATICALLY"
-                else
-                    unset 'buffer[$i]'
-                fi
+        local _bline
+        local -a _out=()
+        for _bline in "${buffer[@]}"; do
+            if [[ "$_bline" =~ ^FOUND ]]; then
+                _out+=("$found_line")
+            elif [[ "$_bline" =~ ^PHPCBF ]]; then
+                [[ $kept_fixable -gt 0 ]] && _out+=("PHPCBF CAN FIX THE ${kept_fixable} MARKED SNIFF VIOLATIONS AUTOMATICALLY")
+            else
+                _out+=("$_bline")
             fi
         done
-        printf '%s\n' "${buffer[@]}"
+        printf '%s\n' "${_out[@]}"
     fi
     buffer=()
     kept_any=0
@@ -220,33 +232,32 @@ normalize_summary_msg() {
     msg="${msg:0:120}"
     msg="${msg%%; contains *}"
     msg="${msg%%; expected at least *}"
-    msg="${msg%% (PER *}"
+    msg="${msg%% \(PER *}"
     echo "${msg%%[[:space:]]}"
 }
 
 # append_summary <report_file>
 # Appends a SUMMARY block to the report file with totals and per-type breakdown,
-# sorted by count descending.
+# sorted by count descending. Streams normalized keys to temp files (one per
+# severity) so memory stays O(unique message types) rather than O(violations).
 append_summary() {
     local report="$1"
-    local total_errors=0 total_warnings=0 has_errors=0 has_warnings=0 key
-    declare -A type_errors=()
-    declare -A type_warnings=()
+    local total_errors=0 total_warnings=0 key line _cnt _msg
+    local _re_err='^[[:space:]]*[0-9]+[[:space:]]+[|][[:space:]]+ERROR[[:space:]]+[|][[:space:]]*(.+)'
+    local _re_warn='^[[:space:]]*[0-9]+[[:space:]]+[|][[:space:]]+WARNING[[:space:]]+[|][[:space:]]*(.+)'
+    local _err_tmp _warn_tmp
+    _err_tmp="$(mktemp)"; _warn_tmp="$(mktemp)"
+    TMPFILES+=("$_err_tmp" "$_warn_tmp")
+
     while IFS= read -r line; do
-        if [[ "$line" =~ ^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+ERROR[[:space:]]+\|[[:space:]]*(.+) ]]; then
+        if [[ "$line" =~ $_re_err ]]; then
             ((total_errors++)) || true
             key="$(normalize_summary_msg "${BASH_REMATCH[1]}")"
-            if [[ -n "$key" ]]; then
-                has_errors=1
-                type_errors["$key"]=$((${type_errors["$key"]:-0} + 1))
-            fi
-        elif [[ "$line" =~ ^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+WARNING[[:space:]]+\|[[:space:]]*(.+) ]]; then
+            [[ -n "$key" ]] && printf '%s\n' "$key" >> "$_err_tmp"
+        elif [[ "$line" =~ $_re_warn ]]; then
             ((total_warnings++)) || true
             key="$(normalize_summary_msg "${BASH_REMATCH[1]}")"
-            if [[ -n "$key" ]]; then
-                has_warnings=1
-                type_warnings["$key"]=$((${type_warnings["$key"]:-0} + 1))
-            fi
+            [[ -n "$key" ]] && printf '%s\n' "$key" >> "$_warn_tmp"
         fi
     done < "$report"
     {
@@ -257,26 +268,17 @@ append_summary() {
         echo "Total errors:   $total_errors"
         echo "Total warnings: $total_warnings"
         echo ""
-        if [[ $has_errors -eq 1 ]]; then
+        if [[ -s "$_err_tmp" ]]; then
             echo "By error type:"
-            while IFS=$'\t' read -r cnt msg; do
-                printf "  %3d  %s\n" "$cnt" "$msg"
-            done < <(
-                for k in "${!type_errors[@]}"; do
-                    printf '%s\t%s\n' "${type_errors[$k]}" "$k"
-                done | sort -t $'\t' -k1,1rn
-            )
+            sort "$_err_tmp" | uniq -c | sort -rn | \
+            while read -r _cnt _msg; do printf "  %3d  %s\n" "$_cnt" "$_msg"; done
             echo ""
         fi
-        if [[ $has_warnings -eq 1 ]]; then
+        if [[ -s "$_warn_tmp" ]]; then
             echo "By warning type:"
-            while IFS=$'\t' read -r cnt msg; do
-                printf "  %3d  %s\n" "$cnt" "$msg"
-            done < <(
-                for k in "${!type_warnings[@]}"; do
-                    printf '%s\t%s\n' "${type_warnings[$k]}" "$k"
-                done | sort -t $'\t' -k1,1rn
-            )
+            sort "$_warn_tmp" | uniq -c | sort -rn | \
+            while read -r _cnt _msg; do printf "  %3d  %s\n" "$_cnt" "$_msg"; done
         fi
     } >> "$report"
+    rm -f "$_err_tmp" "$_warn_tmp"
 }

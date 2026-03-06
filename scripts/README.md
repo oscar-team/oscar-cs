@@ -11,6 +11,7 @@ For a detailed explanation of the internal logic, see [VALIDATION-LOGIC.md](VALI
 
 ### Prerequisites
 
+- **Shell**: bash 4+ or zsh 5+. macOS ships with zsh as the default shell, so no extra install is needed. If you want to use bash, install it via Homebrew (`brew install bash`) as macOS's built-in bash is 3.2.
 - PHP in `PATH`.
 - Oscar standard and phpcs installed: run `composer install` once in `oscar-cs/`.
 - Both scripts resolve `phpcs` and the Oscar ruleset from their own location (`oscar-cs/vendor/bin/phpcs`, `oscar-cs/Oscar/ruleset.xml`) — no need to reference `oscar-cs/` in your arguments.
@@ -40,6 +41,14 @@ All examples below assume you have changed into the `oscar-cs/scripts/` director
 
 ```bash
 cd oscar-cs/scripts
+```
+
+The scripts can be invoked with either shell:
+
+```bash
+./validate-pr-oscar-cs.sh ...        # uses whichever shell is in the shebang (bash)
+zsh ./validate-pr-oscar-cs.sh ...    # explicit zsh (macOS default, no install needed)
+bash ./validate-pr-oscar-cs.sh ...   # explicit bash (requires bash 4+)
 ```
 
 Point reports to the repository root (two levels up from `oscar-cs/scripts/`):
@@ -106,6 +115,12 @@ validate-codebase-oscar-cs.sh SITE_PATH [BRANCH]
 
 **Default behaviour:** Run phpcs on `PHPCS_BASE_BRANCH` and on `BRANCH`, subtract violations already present in the base, and report only violations that are **new in `BRANCH`**. Pre-existing technical debt is not surfaced.
 
+After scanning, the script prints a progress line:
+```
+Violations in master: 16604 | in open-api-doc-generation: 16640 | new (in report): 483
+```
+The first two figures are raw totals; "new (in report)" is the count in the report file. Note: because violation keys include line numbers, violations that shifted position due to added/removed lines will appear as "new" even if the underlying issue is pre-existing. The report may therefore be larger than the net difference (`current − base`) suggests.
+
 **`PHPCS_REPORT_ALL_LINES=1`** — Skip the base comparison and report every violation found in `BRANCH` (full audit mode).
 
 ### Codebase examples
@@ -155,7 +170,7 @@ In CI the working tree is always clean, so this prompt never appears.
 - Written to **`PHPCS_REPORT_PATH`** (directory) with an auto-generated timestamped filename, or to the **current working directory** if `PHPCS_REPORT_PATH` is not set.
 - Set `PHPCS_REPORT_FILE` (full path) to override the filename entirely.
 - A **summary** is appended at the end: total errors/warnings, then a breakdown by type sorted by count (most frequent first).
-- **Exit code**: `0` if no violations or warnings only; `1` if errors are found. Set `PHPCS_FAIL_ON_WARNINGS=1` to also exit `1` on warnings.
+- **Exit code**: `0` if no violations or warnings only; `1` if errors are found (set `PHPCS_FAIL_ON_WARNINGS=1` to also exit `1` on warnings); `2` if phpcs itself failed with a tool or configuration error (the report may be incomplete — check phpcs setup).
 
 ## Interrupting the scripts
 
@@ -196,6 +211,8 @@ script:
     || exit 2
   - bash /tmp/oscar-cs/scripts/validate-pr-oscar-cs.sh "$CI_PROJECT_DIR" "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
 ```
+
+CI runners typically have bash 4+ available. If the runner uses a minimal image without bash, replace `bash` with `zsh` (or ensure bash is installed). The scripts run identically under either shell.
 
 If the clone or install fails the job exits non-zero, which is advisory in the default setup (`allow_failure: true`). In enforcing mode, consider whether a failed clone should block — if not, add `|| { echo "Warning: setup failed, skipping."; exit 0; }` to the setup chain.
 
