@@ -12,7 +12,7 @@
 #   - No source files are modified (read-only analysis).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=lib-oscar-cs.sh
 source "${SCRIPT_DIR}/lib-oscar-cs.sh"
 check_bash_version
@@ -80,6 +80,9 @@ if ! git -C "${GIT_ROOT}" rev-parse "${BASE_REF}" >/dev/null 2>&1; then
     echo "Error: base ref '${BASE_BRANCH}' (resolved: ${BASE_REF}) not found." >&2; exit 1
 fi
 
+# ── untracked conflict preflight ──────────────────────────────────────────────
+check_untracked_conflicts "${CURRENT_REF}"
+
 # ── git safety (stash, cleanup, traps) ────────────────────────────────────────
 setup_git_safety "validate-pr-oscar-cs temporary stash"
 
@@ -92,10 +95,13 @@ else
     SITE_REL="${SITE_FULL#${GIT_ROOT}/}"
 fi
 
+CHANGED_FILES=()
 if [[ -z "${SITE_REL}" ]]; then
-    mapfile -t CHANGED_FILES < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" 2>/dev/null | grep '\.php$' || true)
+    while IFS= read -r _f; do CHANGED_FILES+=("$_f"); done \
+        < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" 2>/dev/null | grep '\.php$' || true)
 else
-    mapfile -t CHANGED_FILES < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" -- "${SITE_REL}" 2>/dev/null | grep '\.php$' || true)
+    while IFS= read -r _f; do CHANGED_FILES+=("$_f"); done \
+        < <(git -C "${GIT_ROOT}" diff --name-only "${BASE_REF}"..."${CURRENT_REF}" -- "${SITE_REL}" 2>/dev/null | grep '\.php$' || true)
 fi
 
 if [[ ${#CHANGED_FILES[@]} -eq 0 ]]; then
@@ -125,12 +131,14 @@ if [[ ${#EXISTING_FILES[@]} -eq 0 ]]; then
 fi
 
 # ── changed-line set (+ lines only, not context lines) ────────────────────────
-declare -A CHANGED_LINE_SET
+typeset -A CHANGED_LINE_SET
+typeset -i CHANGED_LINE_COUNT=0
 if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
     echo "Restricting to violations on changed lines only (default). Set PHPCS_REPORT_ALL_LINES=1 for full-file report."
     for f in "${EXISTING_FILES[@]}"; do
         while IFS= read -r lineno; do
             CHANGED_LINE_SET["${f}:${lineno}"]=1
+            CHANGED_LINE_COUNT=$(( CHANGED_LINE_COUNT + 1 ))
         done < <(
             git -C "${GIT_ROOT}" diff "${BASE_REF}"..."${CURRENT_REF}" -- "$f" 2>/dev/null | awk '
                 /^\+\+\+ / { next }
@@ -149,9 +157,14 @@ if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" ]]; then
 fi
 
 # ── run phpcs ─────────────────────────────────────────────────────────────────
+# phpcs exit codes: 0 = no violations, 1 = violations found, 2 = violations found
+# and some are auto-fixable (phpcbf can fix them), ≥3 = tool/config error.
+# Only ≥3 is a hard failure; 0–2 all mean the run completed successfully.
 PHPCS_EXIT=0
-if ! (cd "${SITE_FULL}" && "${PHPCS_BIN}" --standard="${RULESET}" --extensions=php --report-file="${REPORT_FILE}" "${EXISTING_FILES[@]}"); then
-    PHPCS_EXIT=1
+(cd "${SITE_FULL}" && "${PHPCS_BIN}" --standard="${RULESET}" --extensions=php --report-file="${REPORT_FILE}" "${EXISTING_FILES[@]}") || PHPCS_EXIT=$?
+if [[ $PHPCS_EXIT -ge 3 ]]; then
+    echo "Error: phpcs exited with code ${PHPCS_EXIT} (tool or configuration failure); the report may be incomplete." >&2
+    exit 2
 fi
 
 # ── validate report only contains diff files ──────────────────────────────────
@@ -204,6 +217,8 @@ filter_report_to_changed_lines() {
     local kept_errors=0 kept_warnings=0 kept_fixable=0
     local -A kept_line_nums=()
     local -a buffer=()
+    local _re_viol='^[[:space:]]*([0-9]+)[[:space:]]+[|][[:space:]]+(ERROR|WARNING)[[:space:]]+[|][[:space:]]*(.+)'
+    local _re_cont='^[[:space:]]*[|]'
 
     while IFS= read -r line || [[ -n "$line" ]]; do
         if [[ "$line" == FILE:* ]]; then
@@ -222,7 +237,7 @@ filter_report_to_changed_lines() {
             done
             keep_this_violation=0
         elif [[ $in_block -eq 1 ]]; then
-            if [[ "$line" =~ ^[[:space:]]*([0-9]+)[[:space:]]+\|[[:space:]]+(ERROR|WARNING)[[:space:]]+\|[[:space:]]*(.+) ]]; then
+            if [[ "$line" =~ $_re_viol ]]; then
                 local line_num="${BASH_REMATCH[1]}" sev="${BASH_REMATCH[2]}" msg="${BASH_REMATCH[3]}"
                 if [[ -n "${CHANGED_LINE_SET["${current_file}:${line_num}"]:-}" ]]; then
                     keep_this_violation=1
@@ -234,7 +249,7 @@ filter_report_to_changed_lines() {
                 else
                     keep_this_violation=0
                 fi
-            elif [[ "$line" =~ ^[[:space:]]*\| ]]; then
+            elif [[ "$line" =~ $_re_cont ]]; then
                 [[ $keep_this_violation -eq 1 ]] && buffer+=("$line")
             elif [[ "$line" =~ ^-+$ ]] || [[ "$line" =~ ^FOUND ]] || [[ "$line" =~ ^PHPCBF ]] || [[ "$line" =~ ^[[:space:]]*$ ]]; then
                 keep_this_violation=0
@@ -252,21 +267,26 @@ filter_report_to_changed_lines() {
     flush_block
 }
 
-if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" && ${#CHANGED_LINE_SET[@]} -gt 0 ]]; then
+if [[ -z "${PHPCS_REPORT_ALL_LINES:-}" && "${CHANGED_LINE_COUNT}" -gt 0 ]]; then
     FILTER_TMP="$(mktemp)"; TMPFILES+=("${FILTER_TMP}")
     filter_report_to_changed_lines "${REPORT_FILE}" > "${FILTER_TMP}"
     mv "${FILTER_TMP}" "${REPORT_FILE}"
-    if ! grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+(ERROR|WARNING)' "${REPORT_FILE}"; then
-        PHPCS_EXIT=0
-    fi
 fi
 
 append_summary "${REPORT_FILE}"
 
-if [[ $PHPCS_EXIT -eq 0 ]]; then
-    echo "Report written to ${REPORT_FILE} (no violations)."
-    exit 0
-else
+_has_errors=0
+_has_warnings=0
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+ERROR' "${REPORT_FILE}"   && _has_errors=1   || true
+grep -qE '^[[:space:]]*[0-9]+[[:space:]]+\|[[:space:]]+WARNING' "${REPORT_FILE}" && _has_warnings=1 || true
+
+if [[ $_has_errors -eq 1 ]] || [[ $_has_warnings -eq 1 && "${PHPCS_FAIL_ON_WARNINGS:-0}" == "1" ]]; then
     echo "Report written to ${REPORT_FILE} (violations found)." >&2
     exit 1
+elif [[ $_has_warnings -eq 1 ]]; then
+    echo "Report written to ${REPORT_FILE} (warnings only, not failing — set PHPCS_FAIL_ON_WARNINGS=1 to fail on warnings)."
+    exit 0
+else
+    echo "Report written to ${REPORT_FILE} (no violations)."
+    exit 0
 fi
