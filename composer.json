@@ -4,5 +4,10 @@
     "type": "phpcodesniffer-standard",
     "require-dev": {
         "squizlabs/php_codesniffer": "^3.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "Oscar\\": "Oscar/"
+        }
     }
 }

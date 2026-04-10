@@ -20,6 +20,8 @@
         <properties>
             <property name="ignoreComments" value="true"/>
         </properties>
+        <!-- Blade is mostly HTML/directives; long lines are normal. -->
+        <exclude-pattern>*.blade.php</exclude-pattern>
         <exclude-pattern>*/resources/lang/*</exclude-pattern>
     </rule>
 
@@ -29,4 +31,12 @@
     <rule ref="Oscar.Functions.EmptyBody"/>
     <rule ref="Oscar.Functions.OpeningFunctionBraceBsdAllman"/>
     <rule ref="Oscar.Formatting.TrailingComma"/>
+    <rule ref="Oscar.Blade.EmbeddedPhp" phpcs-only="true"/>
+    <rule ref="Oscar.Blade.EchoSpacing"/>
+    <rule ref="Oscar.Blade.JsonDirective"/>
+
+    <!-- Blade views are mostly HTML; the PHP tokenizer reports no PHP until <?php — suppress false positive -->
+    <rule ref="Internal.NoCodeFound">
+        <exclude-pattern>*.blade.php</exclude-pattern>
+    </rule>
 </ruleset>
