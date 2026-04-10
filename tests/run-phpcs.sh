@@ -21,6 +21,28 @@ for file in "${ROOT_DIR}"/tests/fixtures/invalid/*.php; do
         exit 1
     fi
 done
+
+echo "Ensuring non-compliant Blade fixtures are detected..."
+for file in "${ROOT_DIR}"/tests/fixtures/blade/invalid*.blade.php; do
+    if [[ ! -f "${file}" ]]; then
+        continue
+    fi
+    if "${PHPCS}" --standard="${STANDARD}" "${file}"; then
+        echo "Expected ${file} to contain violations, but PHPCS reported none." >&2
+        exit 1
+    fi
+done
+
+echo "Running PHPCS on compliant Blade fixtures..."
+for file in "${ROOT_DIR}"/tests/fixtures/blade/valid*.blade.php; do
+    if [[ ! -f "${file}" ]]; then
+        continue
+    fi
+    if ! "${PHPCS}" --standard="${STANDARD}" "${file}"; then
+        echo "Expected ${file} to be clean, but PHPCS reported violations." >&2
+        exit 1
+    fi
+done
 shopt -u nullglob
 
-echo "PHPCS checks passed."
+echo "All tests passed."
