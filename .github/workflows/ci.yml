@@ -20,5 +20,5 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
-      - name: Run coding standard tests
+      - name: Run tests (PHPCS fixtures + Blade library checks)
         run: ./tests/run-phpcs.sh
