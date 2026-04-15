@@ -7,6 +7,11 @@
         <exclude name="Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine"/>
     </rule>
 
+    <!-- Migration files typically omit namespaces -->
+    <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
+        <exclude-pattern>*/database/migrations/*</exclude-pattern>
+    </rule>
+
     <config name="tab_width" value="4"/>
 
     <!-- Don't flag comment-only lines (e.g. long docblock lines) for line length -->
