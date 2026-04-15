@@ -9,7 +9,7 @@
 
     <!-- Migration files typically omit namespaces -->
     <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
-        <exclude-pattern>*/database/migrations/*</exclude-pattern>
+        <include-pattern>*/app/*</include-pattern>
     </rule>
 
     <config name="tab_width" value="4"/>
