@@ -19,6 +19,7 @@
         <properties>
             <property name="ignoreComments" value="true"/>
         </properties>
+        <exclude-pattern>*/resources/lang/*</exclude-pattern>
     </rule>
 
     <rule ref="Oscar.Namespaces.UseGrouping"/>
