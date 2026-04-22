@@ -8,8 +8,14 @@ Coding standard for the Oscar technical team that layers project-specific sniffs
 - **Closures.ShortClosure** – enforces arrow function spacing, indentation and semicolon placement rules. (PER §7.1)
 - **Functions.EmptyBody** – requires empty methods/functions to collapse to `{} ` inline bodies with a preceding space. (PER §4.4)
 - **Formatting.TrailingComma** – ensures multi-line lists end with a comma and single-line lists do not. (PER §2.6)
+- **Blade.EmbeddedPhp** (`phpcs` only) – for `*.blade.php` files, extracts PHP from `{{ }}`, `{!! !!}`, `@…(…)`, and `@php` / `@endphp` blocks, runs the same standard against a synthetic PHP buffer, and replays violations on the Blade line. `phpcbf` does not rewrite Blade via this sniff.
+- **Blade.EchoSpacing** – for `*.blade.php` files, requires exactly one ASCII space after `{{`, `{{-`, and `{!!`, and exactly one space before `}}`, `-}}`, and `!!}` (no doubled spaces). Blade comments and `@verbatim` … `@endverbatim` are ignored.
 
 All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR12` standard.
+
+### Laravel Blade (`*.blade.php`)
+
+Views are checked with **Blade.EmbeddedPhp** and **Blade.EchoSpacing**: embedded PHP is validated with the same sniffs as ordinary PHP. Pure HTML/CSS lines are not interpreted as PHP. Custom Blade directives or compiler-only syntax may not be extracted; extend `Oscar\Blade\FragmentExtractor` if you need more surface syntax. Cover new behaviour with Blade fixtures under `tests/fixtures/blade/` and extend `tests/run-phpcs.sh` loops if you add new naming patterns.
 
 ## Installation
 1. Install PHP_CodeSniffer (globally or per-project), for example:
@@ -47,7 +53,7 @@ All other PER/PSR-12 expectations are inherited by referencing the upstream `PSR
 
 ## Testing
 - Install dependencies with `composer install`.
-- Run the automated fixtures with `./tests/run-phpcs.sh`.
+- Run the full test suite with `./tests/run-phpcs.sh`: PHPCS on valid/invalid PHP and Blade fixtures (`tests/fixtures/blade/valid*.blade.php` must be clean; `invalid*.blade.php` must report violations).
 
 ## Development Notes
 - Baseline PSR-12 is referenced, with `Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore` excluded to avoid conflicts with inline empty bodies.
