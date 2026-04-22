@@ -6,9 +6,11 @@ namespace Oscar\Sniffs\Functions;
 
 use PHP_CodeSniffer\Files\File;
 use PHP_CodeSniffer\Sniffs\Sniff;
+use PHP_CodeSniffer\Util\Tokens;
 
 /**
- * Requires empty method and function bodies to use the inline "{}" form per PER Coding Style §4.4.
+ * Requires empty method and function bodies, and void methods whose only statement is a bare
+ * return, to use the inline "{}" form per PER Coding Style §4.4.
  */
 final class EmptyBodySniff implements Sniff
 {
@@ -34,19 +36,42 @@ final class EmptyBodySniff implements Sniff
         $opener = $tokens[$stackPtr]['scope_opener'];
         $closer = $tokens[$stackPtr]['scope_closer'];
 
-        if ($this->hasBodyContent($tokens, $opener, $closer)) {
+        if (self::bodyContainsNonWhitespace($tokens, $opener, $closer) === true
+            && self::isVoidBareReturnOnlyBody($phpcsFile, $stackPtr, $opener, $closer) === false
+        ) {
             return;
         }
 
-        $this->assertInlineBraces($phpcsFile, $stackPtr, $opener, $closer);
+        $this->assertInlineBraces($phpcsFile, $opener, $closer);
     }
 
     /**
-     * Determine if any non-whitespace content exists between the braces.
-     *
+     * Same-line "{}" bodies allowed by PER §4.4 must not be flagged by PSR-12 Allman brace placement.
+     */
+    public static function permitsInlineEmptyOpeningBrace(File $phpcsFile, int $stackPtr): bool
+    {
+        $tokens = $phpcsFile->getTokens();
+        if (isset($tokens[$stackPtr]['scope_opener'], $tokens[$stackPtr]['scope_closer']) === false) {
+            return false;
+        }
+
+        $opener = $tokens[$stackPtr]['scope_opener'];
+        $closer = $tokens[$stackPtr]['scope_closer'];
+        if ($tokens[$opener]['line'] !== $tokens[$closer]['line']) {
+            return false;
+        }
+
+        if (self::bodyContainsNonWhitespace($tokens, $opener, $closer) === false) {
+            return true;
+        }
+
+        return self::isVoidBareReturnOnlyBody($phpcsFile, $stackPtr, $opener, $closer);
+    }
+
+    /**
      * @param array<int, array<string, mixed>> $tokens
      */
-    private function hasBodyContent(array $tokens, int $opener, int $closer): bool
+    private static function bodyContainsNonWhitespace(array $tokens, int $opener, int $closer): bool
     {
         for ($ptr = $opener + 1; $ptr < $closer; $ptr++) {
             if ($tokens[$ptr]['code'] !== T_WHITESPACE) {
@@ -57,7 +82,34 @@ final class EmptyBodySniff implements Sniff
         return false;
     }
 
-    private function assertInlineBraces(File $phpcsFile, int $functionPtr, int $opener, int $closer): void
+    /**
+     * True when the declaration returns void and the body is only a bare return; (optional comments/whitespace).
+     */
+    private static function isVoidBareReturnOnlyBody(File $phpcsFile, int $stackPtr, int $opener, int $closer): bool
+    {
+        $props = $phpcsFile->getMethodProperties($stackPtr);
+        if (isset($props['return_type']) === false || strtolower($props['return_type']) !== 'void') {
+            return false;
+        }
+
+        $tokens = $phpcsFile->getTokens();
+
+        $first = $phpcsFile->findNext(Tokens::$emptyTokens, ($opener + 1), $closer, true);
+        if ($first === false || $tokens[$first]['code'] !== T_RETURN) {
+            return false;
+        }
+
+        $afterReturn = $phpcsFile->findNext(Tokens::$emptyTokens, ($first + 1), $closer, true);
+        if ($afterReturn === false || $tokens[$afterReturn]['code'] !== T_SEMICOLON) {
+            return false;
+        }
+
+        $afterSemi = $phpcsFile->findNext(Tokens::$emptyTokens, ($afterReturn + 1), $closer, true);
+
+        return $afterSemi === false;
+    }
+
+    private function assertInlineBraces(File $phpcsFile, int $opener, int $closer): void
     {
         $tokens = $phpcsFile->getTokens();
 
@@ -81,7 +133,7 @@ final class EmptyBodySniff implements Sniff
 
         if ($opener + 1 !== $closer) {
             $phpcsFile->addError(
-                'Inline empty bodies MUST contain no whitespace between "{" and "}" (PER 3.0 §4.4).',
+                'Inline "{}" bodies MUST not contain statements or whitespace between "{" and "}" (PER 3.0 §4.4).',
                 $opener,
                 'WhitespaceInsideInlineBody'
             );

@@ -4,6 +4,7 @@
 
     <rule ref="PSR12">
         <exclude name="Squiz.WhiteSpace.ScopeClosingBrace.ContentBefore"/>
+        <!-- Delegated brace errors use this code even for single-line declarations; Oscar.Functions.OpeningFunctionBraceBsdAllman restores checks with a PER §4.4 exception. -->
         <exclude name="Squiz.Functions.MultiLineFunctionDeclaration.BraceOnSameLine"/>
     </rule>
 
@@ -26,5 +27,6 @@
     <rule ref="Oscar.Attributes.AttributePlacement"/>
     <rule ref="Oscar.Closures.ShortClosure"/>
     <rule ref="Oscar.Functions.EmptyBody"/>
+    <rule ref="Oscar.Functions.OpeningFunctionBraceBsdAllman"/>
     <rule ref="Oscar.Formatting.TrailingComma"/>
 </ruleset>
