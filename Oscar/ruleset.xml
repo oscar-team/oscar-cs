@@ -24,6 +24,7 @@
     </rule>
 
     <rule ref="Oscar.Namespaces.UseGrouping"/>
+    <rule ref="Oscar.Namespaces.UseStatementOrdering"/>
     <rule ref="Oscar.Attributes.AttributePlacement"/>
     <rule ref="Oscar.Closures.ShortClosure"/>
     <rule ref="Oscar.Functions.EmptyBody"/>
