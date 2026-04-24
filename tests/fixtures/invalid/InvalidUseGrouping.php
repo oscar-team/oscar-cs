@@ -2,10 +2,7 @@
 
 namespace App;
 
-use Vendor\Package\SomeNamespace\{
-    SubNamespace\Deep\ClassA,
-    SubNamespace\ClassB,
-};
+use Vendor\Package\SomeNamespace\{SubNamespace\ClassB, SubNamespace\Deep\ClassA};
 
 class InvalidUseGrouping
 {
