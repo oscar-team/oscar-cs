@@ -23,6 +23,19 @@
         <exclude-pattern>*/resources/lang/*</exclude-pattern>
     </rule>
 
+    <!-- Same behaviour as PSR12's ScopeIndent, with a fix for `match` inside chained calls -->
+    <rule ref="Generic.WhiteSpace.ScopeIndent">
+        <severity>0</severity>
+    </rule>
+    <rule ref="Oscar.WhiteSpace.ScopeIndent">
+        <properties>
+            <property name="ignoreIndentationTokens" type="array">
+                <element value="T_COMMENT"/>
+                <element value="T_DOC_COMMENT_OPEN_TAG"/>
+            </property>
+        </properties>
+    </rule>
+
     <rule ref="Oscar.Namespaces.UseGrouping"/>
     <rule ref="Oscar.Attributes.AttributePlacement"/>
     <rule ref="Oscar.Closures.ShortClosure"/>
